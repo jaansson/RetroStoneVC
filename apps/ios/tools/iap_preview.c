@@ -49,3 +49,22 @@ int iap_buy(void)
 
 void iap_restore(void) { changes++; }
 unsigned iap_changes(void) { return (unsigned)changes; }
+
+/* no tips, as the iOS app (iap.h: its StoreKit backend sells none yet) */
+void iap_tips_init(const char *const *product_ids, int n)
+{
+    (void)product_ids;
+    (void)n;
+}
+int iap_tips_available(void) { return 0; }
+const char *iap_tip_price(int tier)
+{
+    (void)tier;
+    return "";
+}
+int iap_tip_buy(int tier)
+{
+    (void)tier;
+    return 0;
+}
+unsigned iap_tips_done(void) { return 0; }
