@@ -16,9 +16,29 @@ and Android builds; what is iOS's lives here and behind `#ifdef __IPHONEOS__`.
 
 The build number (`CFBundleVersion`): the CI run's number. Both apps: iPhone and iPad, full screen, no status bar.
 
+**RetroStone** (`apps/ios/retrostone`), the one free app of Google Play (`apps/android/app-retrostone.conf`): the board
+games and the Arcade's games in their tab, every game and every level free, nothing sold (no in-app purchase, no tips
+yet: `apps/common/iap.h`, `IAP_HAS_TIPS`). Bundle id `com.eightbcraft.retrostone`; its edition, version and icon:
+`apps/android/app-retrostone.conf` (`EDITION_FROM`), without what is the Play Store's (the review page, the tips);
+portrait and landscape. It is RetroStone Board's project with the Arcade tab, as `apps/boardgames/Makefile` builds it
+with `ARCADE` elsewhere: `prepare.sh retrostone` also makes the tab's cards and the bundle's generated sources
+(`build/bundle/gen-retrostone`, its `.conf`: `build/ios/retrostone/arcade.conf`), `build.sh retrostone` first makes
+`libarcade_board.a` (`apps/launcher/bundle.mk PLATFORM=ios-<sdk>-arm64 ios-board-lib`: the Arcade's `libarcade.a`
+without the frontend, which `src/arcade_play.c` compiles in), and `retrostone/project.yml` builds the board app with
+`ARCADE=1`, `arcade_play.c` with the launcher's and the SDK's headers, and links that archive.
+
+## Without the Apple Developer Program: an unsigned .ipa to sideload
+
+`apps/ios/build.sh <app> unsigned` (macOS) builds the devices' app without signing it:
+`build/ios/<app>/<TARGET>-unsigned.ipa`, the CI's `ios-<app>-unsigned-ipa` artifact (each run, no secrets needed). A
+sideloading tool signs it with one's own (free) Apple Account and installs it: AltStore or SideStore, or Sideloadly
+(Windows or macOS, the iPhone on a cable). With a free account the signature lasts 7 days (the tool renews it), and
+iOS 16 and later need Settings > Privacy & Security > Developer Mode turned on. The tools usually change the bundle id
+to one of the account's own; nothing in the app depends on it (nothing is sold, the saves are the app's own).
+
 ## How it is built
 
-1. **`apps/ios/prepare.sh board|arcade`** (Linux; the CI's `prepare` job): the generated sources, with the same
+1. **`apps/ios/prepare.sh board|arcade|retrostone`** (Linux; the CI's `prepare` job): the generated sources, with the same
    tools as every other build (they need Linux's fonts and Python's Pillow, numpy, fontTools):
    - Board: the texts and their fonts, the pictures, the edition (`board/app.conf` + the free set:
      `build/ios/board/edition.conf`), into `build/ios/board/gen`;
@@ -30,11 +50,11 @@ The build number (`CFBundleVersion`): the CI run's number. Both apps: iPhone and
      (`tools/iap_preview.c`): the CI's `ios-panel-preview` artifact.
 2. **`apps/ios/build-sdl.sh`** (macOS): SDL2's source release (`tools/fetch_sdl2_src.sh`, the version Android uses)
    built by its own Xcode project, for the devices and the simulator: `build/ios/sdl` (cached by the CI).
-3. **`apps/ios/build.sh board|arcade simulator|ipa|upload`** (macOS): the Arcade first makes `libarcade.a`
+3. **`apps/ios/build.sh board|arcade|retrostone simulator|ipa|upload|unsigned`** (macOS): the Arcade first makes `libarcade.a`
    (`apps/launcher/bundle.mk PLATFORM=ios-<sdk>-arm64 ios-lib`, `arcade/ios.mk`); then the Xcode project from
    `<app>/project.yml` (XcodeGen: nothing of Xcode's is kept in git) and `xcodebuild`: the simulator's app
    (unsigned), or a signed archive, its `.ipa`, and the upload to App Store Connect.
-4. **`apps/ios/sim-shots.sh board|arcade`** (macOS): the app in an iPhone and an iPad simulator, screenshots (the
+4. **`apps/ios/sim-shots.sh board|arcade|retrostone`** (macOS): the app in an iPhone and an iPad simulator, screenshots (the
    CI's `ios-<app>-simulator` artifact); fails if the app is not running after 20 s.
 
 The pieces: `common/ios_app.m` (the safe area from UIKit, the entry point), `common/iap_storekit.swift` (the
@@ -72,6 +92,7 @@ push to `main` (and each manual run) to TestFlight; an app without its profile s
 | `IOS_DIST_CERT_PASSWORD` | the .p12's password |
 | `IOS_BOARD_PROFILE_BASE64` | an **App Store** provisioning profile for `com.eightbcraft.retrostoneboard` with that certificate, `base64 -w0 x.mobileprovision` |
 | `IOS_ARCADE_PROFILE_BASE64` | the same for `com.eightbcraft.retrostonearcade` |
+| `IOS_RETROSTONE_PROFILE_BASE64` | the same for `com.eightbcraft.retrostone` |
 | `ASC_KEY_ID` | App Store Connect > Users and Access > Integrations > App Store Connect API: a team key (role App Manager), its Key ID |
 | `ASC_ISSUER_ID` | the Issuer ID shown above the keys |
 | `ASC_KEY_P8` | the text of the downloaded `AuthKey_<id>.p8` (it downloads once only) |

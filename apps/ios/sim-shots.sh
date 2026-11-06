@@ -13,7 +13,7 @@ set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 APP=${1:-}
-case "$APP" in board|arcade) ;; *) echo "usage: $0 board|arcade" >&2; exit 2 ;; esac
+case "$APP" in board|arcade|retrostone) ;; *) echo "usage: $0 board|arcade|retrostone" >&2; exit 2 ;; esac
 cd "$REPO"
 OUT=build/ios/$APP
 SHOTS=build/ios/shots

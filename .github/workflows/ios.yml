@@ -1,7 +1,8 @@
 # The iPhone and iPad apps (apps/ios/README.md): built on GitHub's macOS runners, the owner has no Mac.
 #   prepare     (Linux) the generated sources, the icons, pictures of the unlock panels (apps/ios/prepare.sh)
 #   simulator   (macOS, one per app) SDL2 for iOS (cached), the Xcode project (XcodeGen), the app for the simulator
-#               (unsigned), then booted in an iPhone and an iPad simulator: screenshots and logs as artifacts
+#               (unsigned), then booted in an iPhone and an iPad simulator: screenshots and logs as artifacts; then the
+#               devices' app, not signed (ios-<app>-unsigned-ipa: for AltStore, SideStore, Sideloadly)
 #   testflight  (macOS, one per app) only when the signing secrets exist: a signed .ipa, sent to App Store Connect
 #               (TestFlight). The secrets (Settings > Secrets and variables > Actions), apps/ios/README.md:
 #                 APPLE_TEAM_ID              the Apple Developer team id
@@ -9,6 +10,7 @@
 #                 IOS_DIST_CERT_PASSWORD     the .p12's password
 #                 IOS_BOARD_PROFILE_BASE64   the App Store provisioning profile of com.eightbcraft.retrostoneboard
 #                 IOS_ARCADE_PROFILE_BASE64  the App Store provisioning profile of com.eightbcraft.retrostonearcade
+#                 IOS_RETROSTONE_PROFILE_BASE64  the App Store provisioning profile of com.eightbcraft.retrostone
 #                 ASC_KEY_ID                 the App Store Connect API key's id
 #                 ASC_ISSUER_ID              its issuer id
 #                 ASC_KEY_P8                 the key file's text (AuthKey_<id>.p8)
@@ -61,6 +63,8 @@ jobs:
         run: sh apps/ios/prepare.sh board --preview
       - name: RetroStone Arcade (the games' generated sources, the catalogue, icon, panel pictures)
         run: sh apps/ios/prepare.sh arcade --preview
+      - name: RetroStone (the board games' and the Arcade tab's generated sources, icon)
+        run: sh apps/ios/prepare.sh retrostone
       - name: Signing secrets present?
         id: secrets
         env:
@@ -85,8 +89,10 @@ jobs:
             build/ios/*/app.env
             build/ios/*/app.conf
             build/ios/*/edition.conf
+            build/ios/*/arcade.conf
             build/ios/*/games.txt
             build/bundle/gen-ios
+            build/bundle/gen-retrostone
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
@@ -102,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [board, arcade]
+        app: [board, arcade, retrostone]
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
@@ -132,6 +138,14 @@ jobs:
         run: sh apps/ios/build.sh ${{ matrix.app }} simulator
       - name: The app in the simulator (screenshots)
         run: sh apps/ios/sim-shots.sh ${{ matrix.app }}
+      - name: The devices' app, not signed (for sideloading)
+        run: sh apps/ios/build.sh ${{ matrix.app }} unsigned
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-${{ matrix.app }}-unsigned-ipa
+          path: build/ios/${{ matrix.app }}/*-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -153,7 +167,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [board, arcade]
+        app: [board, arcade, retrostone]
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
@@ -180,7 +194,10 @@ jobs:
         env:
           P12: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
-          PROFILE: ${{ matrix.app == 'board' && secrets.IOS_BOARD_PROFILE_BASE64 || secrets.IOS_ARCADE_PROFILE_BASE64 }}
+          PROFILE: >-
+            ${{ matrix.app == 'board' && secrets.IOS_BOARD_PROFILE_BASE64 ||
+                matrix.app == 'arcade' && secrets.IOS_ARCADE_PROFILE_BASE64 ||
+                matrix.app == 'retrostone' && secrets.IOS_RETROSTONE_PROFILE_BASE64 || '' }}
           KEY_ID: ${{ secrets.ASC_KEY_ID }}
           P8: ${{ secrets.ASC_KEY_P8 }}
         run: |

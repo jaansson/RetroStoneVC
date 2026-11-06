@@ -7,6 +7,10 @@
 #   apps/ios/build.sh board ipa           a signed archive and build/ios/board/ipa/RetroStoneBoard.ipa (App Store)
 #   apps/ios/build.sh board upload        the same, then sent to App Store Connect (TestFlight)
 #   apps/ios/build.sh arcade ...          the same for RetroStone Arcade (first its libarcade.a: apps/ios/arcade/ios.mk)
+#   apps/ios/build.sh retrostone ...      the same for RetroStone (first its Arcade tab's libarcade_board.a: ios.mk)
+#   apps/ios/build.sh <app> unsigned      the devices' app, NOT signed, as build/ios/<app>/<TARGET>-unsigned.ipa:
+#                                         for a sideloading tool (AltStore, SideStore, Sideloadly) that signs it with
+#                                         one's own Apple Account; no Apple Developer Program needed
 #
 # ipa and upload sign by hand ("manual" signing: nothing is created in the developer account), with:
 #   IOS_TEAM_ID        the Apple Developer team id (10 characters)
@@ -22,8 +26,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 APP=${1:-}
 MODE=${2:-simulator}
-case "$APP" in board|arcade) ;; *) echo "usage: $0 board|arcade [simulator|ipa|upload]" >&2; exit 2 ;; esac
-case "$MODE" in simulator|ipa|upload) ;; *) echo "usage: $0 board|arcade [simulator|ipa|upload]" >&2; exit 2 ;; esac
+USAGE="usage: $0 board|arcade|retrostone [simulator|ipa|upload|unsigned]"
+case "$APP" in board|arcade|retrostone) ;; *) echo "$USAGE" >&2; exit 2 ;; esac
+case "$MODE" in simulator|ipa|upload|unsigned) ;; *) echo "$USAGE" >&2; exit 2 ;; esac
 cd "$REPO"
 OUT=build/ios/$APP
 [ -f "$OUT/app.env" ] || { echo "$OUT/app.env is missing: run apps/ios/prepare.sh $APP first" >&2; exit 1; }
@@ -52,6 +57,22 @@ if [ "$APP" = arcade ]; then
     ls -l "build/bundle/$P-ios/libarcade.a"
 fi
 
+if [ "$APP" = retrostone ]; then
+    # the Arcade tab's libarcade_board.a (apps/ios/arcade/ios.mk, ios-board-lib): as the Arcade's, from the generated
+    # sources of prepare.sh (build/bundle/gen-retrostone), without the frontend (apps/boardgames/src/arcade_play.c)
+    [ -f "$OUT/games.txt" ] || { echo "$OUT/games.txt is missing: run apps/ios/prepare.sh retrostone first" >&2; exit 1; }
+    find build/bundle/gen-retrostone "$OUT" -type f -exec touch {} +
+    if [ "$MODE" = simulator ]; then P=ios-iphonesimulator-arm64; else P=ios-iphoneos-arm64; fi
+    say "libarcade_board.a ($P: the launcher's runtime, the SDK, $(wc -w < "$OUT/games.txt") games as Mach-O modules)"
+    MK=$(command -v gmake || echo make)
+    "$MK" --no-print-directory -f apps/launcher/bundle.mk PLATFORM="$P" CONF="$OUT/arcade.conf" \
+        GAMES="$(cat "$OUT/games.txt")" -o build/bundle/gen-retrostone/catalog.c -j"$(sysctl -n hw.ncpu)" \
+        ios-board-lib > "$OUT/libarcade-$P.log" 2>&1 || { grep -E "error|Error" "$OUT/libarcade-$P.log" | head -40;
+                                                         tail -30 "$OUT/libarcade-$P.log"; exit 1; }
+    grep "modulize .*warning" "$OUT/libarcade-$P.log" || true
+    ls -l "build/bundle/$P-retrostone/libarcade_board.a"
+fi
+
 say "the Xcode project (XcodeGen: apps/ios/$APP/project.yml)"
 xcodegen generate --spec "apps/ios/$APP/project.yml" --project "$OUT"
 PROJ=$OUT/$TARGET.xcodeproj
@@ -70,6 +91,23 @@ if [ "$MODE" = simulator ]; then
     cp -R "$OUT/dd/Build/Products/Release-iphonesimulator/$TARGET.app" "$OUT/$TARGET.app"
     (cd "$OUT" && rm -f "$TARGET-simulator.zip" && zip -qr "$TARGET-simulator.zip" "$TARGET.app")
     echo "$OUT/$TARGET.app ($BUNDLE_ID)"
+    exit 0
+fi
+
+if [ "$MODE" = unsigned ]; then
+    say "$TARGET $VERSION ($BUILD) for the devices, not signed"
+    # shellcheck disable=SC2086
+    xcodebuild -project "$PROJ" -scheme "$TARGET" -configuration Release -sdk iphoneos \
+        -destination "generic/platform=iOS" -derivedDataPath "$OUT/dd-device" $VERS \
+        CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build \
+        > "$OUT/xcodebuild-unsigned.log" 2>&1 || { grep -E "error:" "$OUT/xcodebuild-unsigned.log" | head -40;
+                                                  tail -40 "$OUT/xcodebuild-unsigned.log"; exit 1; }
+    # an .ipa is a zip of Payload/<app>.app
+    rm -rf "$OUT/unsigned" "$OUT/$TARGET-unsigned.ipa"
+    mkdir -p "$OUT/unsigned/Payload"
+    cp -R "$OUT/dd-device/Build/Products/Release-iphoneos/$TARGET.app" "$OUT/unsigned/Payload/"
+    (cd "$OUT/unsigned" && zip -qr "../$TARGET-unsigned.ipa" Payload)
+    ls -l "$OUT/$TARGET-unsigned.ipa"
     exit 0
 fi
 

@@ -27,9 +27,18 @@ $(foreach g,$(GAMES),$(eval $(BD)/games/$(g)/%.o: CFLAGS_ALL += -include $(SECT_
 $(BD)/mod/house.o: MODULIZE += --sect 00 --ldflags="-arch $(IOS_ARCH)"
 $(foreach g,$(GAMES),$(eval $(BD)/mod/$(g).o: MODULIZE += --sect $(call sect_of,$(g)) --ldflags="-arch $(IOS_ARCH)"))
 
-.PHONY: ios-lib
+.PHONY: ios-lib ios-board-lib
 ios-lib: $(BD)/libarcade.a
 
 $(BD)/libarcade.a: $(call o,apps/launcher/src/rsb_sdl.c) $(CORE)
+	@rm -f $@
+	xcrun libtool -static -o $@ $^
+
+# the RetroStone app's Arcade tab (apps/ios/build.sh retrostone, CONF=build/ios/retrostone/arcade.conf): the same
+# without the frontend (the app compiles rsb_sdl.c into apps/boardgames/src/arcade_play.c), as board-lib does elsewhere,
+# the SDK merged in: one archive for the Xcode project (apps/ios/retrostone/project.yml)
+ios-board-lib: $(BD)/libarcade_board.a
+
+$(BD)/libarcade_board.a: $(CORE)
 	@rm -f $@
 	xcrun libtool -static -o $@ $^

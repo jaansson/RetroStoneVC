@@ -1,0 +1,133 @@
+# RetroStone for iPhone and iPad: the Xcode project's spec, for XcodeGen (https://github.com/yonaskolb/XcodeGen).
+# apps/ios/build.sh retrostone writes build/ios/retrostone/RetroStone.xcodeproj from it; nothing of Xcode's is kept in
+# the repository. Paths here: from this folder; in the build settings: from the repository (RS_REPO).
+# RetroStone Board's project (apps/ios/board/project.yml) with the Arcade tab, as apps/boardgames/Makefile builds it
+# with ARCADE elsewhere: ARCADE=1 for every file, src/arcade_play.c with the launcher's and the SDK's headers (it
+# compiles the Arcade's frontend, rsb_sdl.c, in), the tab's cards (gen/arcade_data.c), and libarcade_board.a (the
+# launcher's runtime, the catalogue, every game as a Mach-O module, the SDK: apps/ios/arcade/ios.mk, ios-board-lib).
+# Before it: apps/ios/prepare.sh retrostone (build/ios/retrostone: gen/, Assets.xcassets; build/bundle/gen-retrostone)
+# and apps/ios/build-sdl.sh (SDL2: build/ios/sdl). arm64 only (the simulator of Apple silicon Macs too). The version
+# (MARKETING_VERSION, CURRENT_PROJECT_VERSION) and the signing come from build.sh's command line.
+# MIT licence, (c) 2026 Pierre-Louis Boyer (8BCraft).
+name: RetroStone
+options:
+  bundleIdPrefix: com.eightbcraft
+  deploymentTarget:
+    iOS: "15.0"
+  # no intermediate groups: the sources lie outside the project's folder (build/ios/<app>), and groups made for
+  # their "../../.." path components resolve to wrong paths (a doubled folder: the first CI run)
+  createIntermediateGroups: false
+settings:
+  base:
+    RS_REPO: $(SRCROOT)/../../..
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    CLANG_ENABLE_OBJC_ARC: YES
+    GCC_C_LANGUAGE_STANDARD: gnu11
+    ENABLE_BITCODE: NO
+    DEAD_CODE_STRIPPING: YES
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+  configs:
+    Release:
+      GCC_OPTIMIZATION_LEVEL: "2"
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+targets:
+  RetroStone:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      # the app: the shell, the games, save, sound, art, cards, the bots (apps/boardgames/src, as every build)
+      - path: ../../boardgames/src
+        excludes:
+          - arcade_play.c
+      # the Arcade tab's frontend: the Arcade's rsb_sdl.c compiled in (apps/boardgames/Makefile: ARC_INC)
+      - path: ../../boardgames/src/arcade_play.c
+        compilerFlags:
+          - -D_POSIX_C_SOURCE=200809L
+          - -I$(RS_REPO)/apps/launcher/src
+          - -I$(RS_REPO)/sdk/include
+          - -I$(RS_REPO)/sdk/src
+          - -I$(RS_REPO)/sdk/frontends/common
+      # the generated C (apps/ios/prepare.sh): the texts and fonts, the pictures, the edition, the Arcade tab's cards
+      - path: ../../../build/ios/retrostone/gen
+      # the in-app purchase's C API and the StoreKit backend (nothing is sold: no product id); the safe area and the
+      # entry point
+      - path: ../../common/iap.h
+      - path: ../common/iap_storekit.swift
+      - path: ../common/ios_app.h
+      - path: ../common/ios_app.m
+      - path: ../common/LaunchScreen.storyboard
+      - path: ../../../build/ios/retrostone/Assets.xcassets
+    dependencies:
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      - sdk: StoreKit.framework
+      - sdk: AVFoundation.framework
+      - sdk: AudioToolbox.framework
+      - sdk: CoreAudio.framework
+      - sdk: CoreBluetooth.framework
+      - sdk: CoreFoundation.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreHaptics.framework
+      - sdk: CoreMotion.framework
+      - sdk: CoreVideo.framework
+      - sdk: GameController.framework
+      - sdk: IOKit.framework
+      - sdk: Metal.framework
+      - sdk: OpenGLES.framework
+      - sdk: QuartzCore.framework
+    settings:
+      base:
+        PRODUCT_NAME: RetroStone
+        PRODUCT_BUNDLE_IDENTIFIER: com.eightbcraft.retrostone
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GCC_PREPROCESSOR_DEFINITIONS: ["$(inherited)", "ARCADE=1"]
+        HEADER_SEARCH_PATHS:
+          - $(RS_REPO)/apps/boardgames/src
+          - $(RS_REPO)/apps/common
+          - $(RS_REPO)/apps/ios/common
+          - $(RS_REPO)/sdk/third_party/stb
+          - $(RS_REPO)/build/ios/sdl/include
+        "LIBRARY_SEARCH_PATHS[sdk=iphoneos*]":
+          - $(RS_REPO)/build/ios/sdl/iphoneos
+          - $(RS_REPO)/build/bundle/ios-iphoneos-arm64-retrostone
+        "LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]":
+          - $(RS_REPO)/build/ios/sdl/iphonesimulator
+          - $(RS_REPO)/build/bundle/ios-iphonesimulator-arm64-retrostone
+        OTHER_LDFLAGS: [-larcade_board, -lSDL2, -liconv]
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: ../../../build/ios/retrostone/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleDisplayName: RetroStone
+        CFBundleExecutable: $(EXECUTABLE_NAME)
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleInfoDictionaryVersion: "6.0"
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchStoryboardName: LaunchScreen
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: true
+        # portrait and landscape, as on Android (fullUser); an Arcade game plays full screen in landscape
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # no encryption beyond the system's: no export compliance question at each TestFlight upload
+        ITSAppUsesNonExemptEncryption: false
+        # SDL links CoreBluetooth (game pads); the app never uses it, the App Store still wants the sentence
+        NSBluetoothAlwaysUsageDescription: RetroStone does not use Bluetooth itself; game pads connect through iOS.
+    scheme: {}
